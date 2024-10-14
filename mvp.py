@@ -1,5 +1,6 @@
-
 import serial
+import time
+import serial.tools.list_ports  # Only used for example code at end of page.
 
 STX = b'\x02'
 ETX = b'\x03'
@@ -10,14 +11,16 @@ NAK = b'\x15'
 
 
 class Mvp:
-    def __init__(self, serialport=None, mvp_address="01", debug=True):
+    def __init__(self, serial_port, mvp_address="01", debug=True):
         self.debug = debug
         self.addr = mvp_address.encode(encoding='ascii')
         if len(self.addr) != 2:
             raise Exception("MVP address must be two digits. e.g. '01'. \
             Hardwired address is always one higher than the DIP switch binary value '00' -> '01'.")
+        if not isinstance(serial_port, str):
+            raise Exception("MVP serial_port must be a string!")
         self.port = serial.Serial(
-            port=serialport,
+            port=serial_port,
             baudrate=9600,
             timeout=1,
             parity=serial.PARITY_EVEN,
@@ -29,7 +32,6 @@ class Mvp:
         else:
             raise Exception("Serial port couldn't be opened!")
         # self.send_cmd(b'\x02I1G\x03')
-
 
     def __del__(self):
         self.port.close()
@@ -216,7 +218,6 @@ class Mvp:
             return -2
         return int.from_bytes(resp[2:])
 
-
     def poll_valve_type(self):
         """Valve type returned is an int: 2-7
             x = 2: 8 ports
@@ -267,17 +268,17 @@ class Mvp:
             return -2
         return resp[2:]
 
-    def set_valve_type(self, valve_type: str):
-        """Set Valve Type - valve_type argument must be a string!
+    def set_valve_type(self, valve_type: int):
+        """Set Valve Type - valve_type is int
             x = 2 8 ports @ 45 degrees apart
             x = 3 6 ports @ 60 degrees apart
             x = 4 3 ports @ 90 degrees apart
             x = 5 2 ports @ 180 degrees apart
             x = 6 2 ports @ 90 degrees apart
             x = 7 4 ports @ 90 degrees apart (default)"""
-        self._send_cmd(b'Sv' + valve_type.encode(encoding='ascii'), 1, has_bcc=False)
+        self._send_cmd(b'Sv' + str(valve_type).encode(encoding='ascii'), 1, has_bcc=False)
 
-    def set_valve_speed(self, valve_speed: str):
+    def set_valve_speed(self, valve_speed: int):
         """Set Valve Motor Speed. valve_speed must be a string!
             y = 0 30 Hz
             y = 1 40 Hz
@@ -290,7 +291,7 @@ class Mvp:
             y = 8 *110 Hz
             y = 9 *120 Hz
             * If you plan to operate at >60 Hz, please contact Hamilton Company prior to use."""
-        self._send_cmd(b'Sz' + valve_speed.encode(encoding='ascii'), 1, has_bcc=False)
+        self._send_cmd(b'Sz' + str(valve_speed).encode(encoding='ascii'), 1, has_bcc=False)
 
     def set_diagnostic_mode(self):
         """Put instrument in diagnostic mode
@@ -314,54 +315,71 @@ class Mvp:
         Configure communication for auto-addressing"""
         self._send_cmd(b'Y', 1, has_bcc=False)
 
-    def set_valve_position(self, valve_position: str, counter_clockwise: str = "0"):
+    def set_valve_position(self, valve_position: int, counter_clockwise: int = 0):
         """Valve Positioning
         d = 0, CW
         d = 1, CCW
         pp = 1-8, valve positions"""
-        self._send_cmd((b'Vv' + counter_clockwise.encode(encoding='ascii') +
-                        b'n' + valve_position.encode(encoding='ascii')) + b'G',
+        self._send_cmd((b'Vv' + str(counter_clockwise).encode(encoding='ascii') +
+                        b'n' + str(valve_position).encode(encoding='ascii')) + b'G',
                        1, has_bcc=False)
 
-
-    def set_valve_angle(self, valve_angle: str, counter_clockwise: str = "0"):
+    def set_valve_angle(self, valve_angle: int, counter_clockwise: int = 0):
         """Valve Positioning
         d = 0, CW
         d = 1, CCW
         aaa = 0-345 degrees, absolute
         angles from 0 degrees @ 15
         degree increments"""
-        self._send_cmd((b'Vv' + counter_clockwise.encode(encoding='ascii') +
-                        b'w' + valve_angle.encode(encoding='ascii')) + b'G',
+        self._send_cmd((b'Vv' + str(counter_clockwise).encode(encoding='ascii') +
+                        b'w' + str(valve_angle).encode(encoding='ascii')) + b'G',
                        1, has_bcc=False)
 
+    def wait_for_valve(self, timeout=10):
+        """Helper function that will pause for up to timeout seconds for valve motor to stop moving."""
+        start_s = time.time()
+        while (time.time() - start_s) < timeout:
+            resp = self.poll_query()
+            if resp & 0x04 == 0:
+                self._log("wait_for_valve drive busy bit clear, continuing.")
+                break
+            time.sleep(0.25)
 
 
 
-if __name__ == "__main__":
-    saline = Mvp('/dev/ttyUSB0')
-    # saline.initialize()
-    # saline.set_valve_type("6")
-    # saline.poll_valve_type() # Valve type is 6
-    # saline.set_diagnostic_mode()
-    # saline.poll_status()
-    # saline.reset()
-    # saline.open_session()
-    # saline.initialize()
-    # saline.set_valve_position(valve_position="1", counter_clockwise="1")
-    # saline.set_valve_angle(valve_angle="0", counter_clockwise="0")
+
+def example_usage():
+    found_ports = serial.tools.list_ports.comports()
+    if len(found_ports) == 0:
+        print("No serial devices found!")
+        return
+    for index, port in enumerate(found_ports):
+        print(f"Found port: [{index}], {port.device}: \"{port.manufacturer}: {port.product}\" {port.vid}:{port.pid}")
+    port_pick = int(input("Enter the index number (in [ ]) of the port to use: "))
+    saline_valve = Mvp(found_ports[port_pick].device)
+    # saline_valve = Mvp('/dev/ttyUSB0')  # OR manually. Find serial port with `ls /dev/tty*`
+    saline_valve.open_session()
+    saline_valve.initialize()
+    saline_valve.wait_for_valve()  # Wait for valve motion to stop, or the next command will be ignored.
+    existing_valve_type = saline_valve.poll_valve_type()
+    print("Current valve type: ", existing_valve_type)
+    if existing_valve_type != 6:
+        saline_valve.set_valve_type(6)  # Set valve to 2-position, 90-degrees.
+    saline_valve.set_valve_position(valve_position=2, counter_clockwise=0)
+    saline_valve.wait_for_valve()
+    time.sleep(0.5)
+    saline_valve.set_valve_position(valve_position=1, counter_clockwise=1)
+    saline_valve.wait_for_valve()
+    time.sleep(0.5)
+    saline_valve.set_valve_angle(valve_angle=90, counter_clockwise=1)
+    saline_valve.wait_for_valve()
+    time.sleep(0.5)
+    saline_valve.set_valve_angle(valve_angle=0, counter_clockwise=0)
+    saline_valve.wait_for_valve()
+    saline_valve.set_valve_type(existing_valve_type)  # Shouldn't matter, valve settings will reset with power cycle.
+    saline_valve.close_session()
     print("done")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+if __name__ == "__main__":
+    example_usage()
