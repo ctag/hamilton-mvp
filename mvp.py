@@ -335,17 +335,6 @@ class Mvp:
                         b'w' + valve_angle.encode(encoding='ascii')) + b'G',
                        1, has_bcc=False)
 
-#sendCmd(b'\x02Vn2\x03')
-
-#sendCmd(b'\x02Vv1n1G\x03')
-
-#ser.write(b'\x02\x30\x31\x46\x03\xbb') # Send F firmware query
-#ser.write(b'\x02\x30\x31\x56\x03\xab') # Send V valve positioning
-#ser.write(b'\x02\x30\x31\x51\x03\xac') # Send 'Q' query
-
-
-
-
 
 
 
