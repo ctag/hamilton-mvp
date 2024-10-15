@@ -1,7 +1,7 @@
 ## The Accursed Hamilton MVP
 
 <p align="center">
-  <img width="460" alt="Image of the MVP. It looks so smug." src="https://github.com/ctag/hamilton-mvp/blob/main/resources/mvp.jpg">
+  <img width="460" alt="Image of the MVP. It looks so smug." src="https://github.com/ctag/hamilton-mvp/blob/main/resources/mvp.png">
 </p>
 
 *Want to spend $1000+ on a stepper motor in a box? Hamilton co has you covered!
